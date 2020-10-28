@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>test_suite_log.html</h1>
+    <p>Report generated on 27-Oct-2020 at 00:43:17 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.9.0", "pytest": "6.1.1"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>macOS-10.15.7-x86_64-i386-64bit</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.10.0", "ordering": "0.6"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.1</td></tr></table>
+    <h2>Summary</h2>
+    <p>4 tests ran in 195.73 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">4 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_suite_demo.py::RegisterCourseCSVTests::test_invalidEnrollment_1___JavaScript_for_beginners______4450900412345678_______1230_______123___</td>
+          <td class="col-duration">62.06</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log setup------------------------------- <br/>[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //a[contains(text(),&#x27;Sign In&#x27;)] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //a[contains(text(),&#x27;Sign In&#x27;)]locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: email and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: password and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: email and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:101 Sent data on element with locator: email locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: password and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:101 Sent data on element with locator: password locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //input[@value=&#x27;Login&#x27;] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //input[@value=&#x27;Login&#x27;]locatorType: xpath<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m NavigationPage:selenium_driver.py:62 Element Found with locator: ALL COURSES and locatorType: link
+[32mINFO    [0m NavigationPage:selenium_driver.py:87 Clicked on element with locator: ALL COURSESlocatorType: link
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: course and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:101 Sent data on element with locator: course locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: //i[@class=&#x27;fa fa-search&#x27;] and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:87 Clicked on element with locator: //i[@class=&#x27;fa fa-search&#x27;]locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: //h4[contains(@class,&#x27;dynamic-heading&#x27;) and contains(text(),&#x27;JavaScript for beginners&#x27;)] and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:87 Clicked on element with locator: //h4[contains(@class,&#x27;dynamic-heading&#x27;) and contains(text(),&#x27;JavaScript for beginners&#x27;)]locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: //div[3]/button and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:87 Clicked on element with locator: //div[3]/buttonlocatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: //iframe and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:281 Length of iframe list: 
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:282 7
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;48b14bd6-51cd-4346-b754-ce875bdb9521&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: cardnumber and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:182 Element present with locator: cardnumber locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:287 iframe index is:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:288 0
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:116 Waiting for maximum :: 10 :: seconds for element to be visible
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:124 Element appeared on the web page
+[35mDEBUG   [0m RegisterCoursesPage:selenium_driver.py:129 Text is not sent by xpath in field so i will try to send string char by char!
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:133 Sent data on element with locator: cardnumber locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: //iframe and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:281 Length of iframe list: 
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:282 7
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;48b14bd6-51cd-4346-b754-ce875bdb9521&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:78 Element list NOT FOUND with locator: exp-date and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:186 Element not present with locator: exp-date locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;867ce509-3e7e-8042-a4bc-97195c3967d1&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: exp-date and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:182 Element present with locator: exp-date locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:287 iframe index is:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:288 1
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: exp-date and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:101 Sent data on element with locator: exp-date locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: //iframe and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:281 Length of iframe list: 
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:282 7
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;48b14bd6-51cd-4346-b754-ce875bdb9521&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:78 Element list NOT FOUND with locator: cvc and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:186 Element not present with locator: cvc locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;867ce509-3e7e-8042-a4bc-97195c3967d1&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:78 Element list NOT FOUND with locator: cvc and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:186 Element not present with locator: cvc locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;2eddeb2e-8fb2-8246-8070-03047263b46c&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: cvc and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:182 Element present with locator: cvc locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:287 iframe index is:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:288 2
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: cvc and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:101 Sent data on element with locator: cvc locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:64 Element Not Found with locator: /html/body/div[1]/div[3]/div/div/div[1]/div[1]/p and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:89 Cannot click on the element with locator : /html/body/div[1]/div[3]/div/div/div[1]/div[1]/plocatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:64 Element Not Found with locator: /html/body/div[1]/div[3]/div/div/div[1]/div[1]/p and locatorType: xpath
+[31m[1mERROR   [0m RegisterCoursesPage:selenium_driver.py:387 Element :: &#x27;Enroll Button&#x27; state could not be found
+[32mINFO    [0m CheckStatus:checkstatus.py:20 ### VERIFICATION SUCCESSFUL :: + Enrollment Failed Verification
+[32mINFO    [0m CheckStatus:checkstatus.py:45 test_invalidEnrollment ### TEST SUCCESSFUL<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_suite_demo.py::RegisterCourseCSVTests::test_invalidEnrollment_2___Selenium_WebDriver_With_Python_3_x______4450900412345678_______1230_______123___</td>
+          <td class="col-duration">62.56</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m NavigationPage:selenium_driver.py:62 Element Found with locator: ALL COURSES and locatorType: link
+[32mINFO    [0m NavigationPage:selenium_driver.py:87 Clicked on element with locator: ALL COURSESlocatorType: link
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: course and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:101 Sent data on element with locator: course locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: //i[@class=&#x27;fa fa-search&#x27;] and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:87 Clicked on element with locator: //i[@class=&#x27;fa fa-search&#x27;]locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: //h4[contains(@class,&#x27;dynamic-heading&#x27;) and contains(text(),&#x27;Selenium WebDriver With Python 3.x&#x27;)] and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:87 Clicked on element with locator: //h4[contains(@class,&#x27;dynamic-heading&#x27;) and contains(text(),&#x27;Selenium WebDriver With Python 3.x&#x27;)]locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: //div[3]/button and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:87 Clicked on element with locator: //div[3]/buttonlocatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: //iframe and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:281 Length of iframe list: 
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:282 6
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;c05a65ca-ab4c-9a4d-a69b-05bba43653c4&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: cardnumber and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:182 Element present with locator: cardnumber locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:287 iframe index is:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:288 0
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:116 Waiting for maximum :: 10 :: seconds for element to be visible
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:124 Element appeared on the web page
+[35mDEBUG   [0m RegisterCoursesPage:selenium_driver.py:129 Text is not sent by xpath in field so i will try to send string char by char!
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:133 Sent data on element with locator: cardnumber locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: //iframe and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:281 Length of iframe list: 
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:282 6
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;c05a65ca-ab4c-9a4d-a69b-05bba43653c4&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:78 Element list NOT FOUND with locator: exp-date and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:186 Element not present with locator: exp-date locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;56bf54ea-59c4-8c44-98c9-04ab521403f5&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: exp-date and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:182 Element present with locator: exp-date locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:287 iframe index is:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:288 1
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: exp-date and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:101 Sent data on element with locator: exp-date locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: //iframe and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:281 Length of iframe list: 
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:282 6
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;c05a65ca-ab4c-9a4d-a69b-05bba43653c4&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:78 Element list NOT FOUND with locator: cvc and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:186 Element not present with locator: cvc locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;56bf54ea-59c4-8c44-98c9-04ab521403f5&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:78 Element list NOT FOUND with locator: cvc and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:186 Element not present with locator: cvc locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:317 Switch frame with index:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:318 &lt;selenium.webdriver.firefox.webelement.FirefoxWebElement (session=&quot;ffe5c42c-fb65-0c48-9c8a-a02d971c8982&quot;, element=&quot;f326f2f0-35d2-884f-bbb8-65784087411d&quot;)&gt;
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:75 Element list FOUND with locator: cvc and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:182 Element present with locator: cvc locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:287 iframe index is:
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:288 2
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:62 Element Found with locator: cvc and locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:101 Sent data on element with locator: cvc locatorType: name
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:64 Element Not Found with locator: /html/body/div[1]/div[3]/div/div/div[1]/div[1]/p and locatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:89 Cannot click on the element with locator : /html/body/div[1]/div[3]/div/div/div[1]/div[1]/plocatorType: xpath
+[32mINFO    [0m RegisterCoursesPage:selenium_driver.py:64 Element Not Found with locator: /html/body/div[1]/div[3]/div/div/div[1]/div[1]/p and locatorType: xpath
+[31m[1mERROR   [0m RegisterCoursesPage:selenium_driver.py:387 Element :: &#x27;Enroll Button&#x27; state could not be found
+[32mINFO    [0m CheckStatus:checkstatus.py:20 ### VERIFICATION SUCCESSFUL :: + Enrollment Failed Verification
+[32mINFO    [0m CheckStatus:checkstatus.py:45 test_invalidEnrollment ### TEST SUCCESSFUL<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_suite_demo.py::LoginTests::test_InvalidLogin</td>
+          <td class="col-duration">10.41</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log setup------------------------------- <br/>[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //a[contains(text(),&#x27;Sign In&#x27;)] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //a[contains(text(),&#x27;Sign In&#x27;)]locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: email and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: password and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: email and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:101 Sent data on element with locator: email locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: password and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:101 Sent data on element with locator: password locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //input[@value=&#x27;Login&#x27;] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //input[@value=&#x27;Login&#x27;]locatorType: xpath<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m NavigationPage:selenium_driver.py:62 Element Found with locator: //*[@id=&quot;dropdownMenu1&quot;]/img and locatorType: xpath
+[32mINFO    [0m NavigationPage:selenium_driver.py:87 Clicked on element with locator: //*[@id=&quot;dropdownMenu1&quot;]/imglocatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //div[@class=&#x27;dropdown open&#x27;]//a[@href=&#x27;/logout&#x27;] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //div[@class=&#x27;dropdown open&#x27;]//a[@href=&#x27;/logout&#x27;]locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //a[contains(text(),&#x27;Sign In&#x27;)] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //a[contains(text(),&#x27;Sign In&#x27;)]locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: email and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: password and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: email and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:101 Sent data on element with locator: email locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: password and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:101 Sent data on element with locator: password locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //input[@value=&#x27;Login&#x27;] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //input[@value=&#x27;Login&#x27;]locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:75 Element list FOUND with locator: //span[contains(text(),&#x27;Your username or password is invalid. Please try a&#x27;)] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:182 Element present with locator: //span[contains(text(),&#x27;Your username or password is invalid. Please try a&#x27;)] locatorType: xpath<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_suite_demo.py::LoginTests::test_validLogin</td>
+          <td class="col-duration">12.56</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //a[contains(text(),&#x27;Sign In&#x27;)] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //a[contains(text(),&#x27;Sign In&#x27;)]locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: email and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: password and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: email and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:101 Sent data on element with locator: email locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: password and locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:101 Sent data on element with locator: password locatorType: id
+[32mINFO    [0m LoginPage:selenium_driver.py:62 Element Found with locator: //input[@value=&#x27;Login&#x27;] and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:87 Clicked on element with locator: //input[@value=&#x27;Login&#x27;]locatorType: xpath
+[32mINFO    [0m Util:util.py:81 Actual Text From Application Web UI --&gt; :: All Courses
+[32mINFO    [0m Util:util.py:82 Expected Text From Application Web UI --&gt; :: All Courses
+[32mINFO    [0m Util:util.py:84 ### VERIFICATION CONTAINS !!!
+[32mINFO    [0m CheckStatus:checkstatus.py:20 ### VERIFICATION SUCCESSFUL :: + Title Verification
+[32mINFO    [0m LoginPage:selenium_driver.py:75 Element list FOUND with locator: //*[@id=&quot;dropdownMenu1&quot;]/img and locatorType: xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:182 Element present with locator: //*[@id=&quot;dropdownMenu1&quot;]/img locatorType: xpath
+[32mINFO    [0m CheckStatus:checkstatus.py:20 ### VERIFICATION SUCCESSFUL :: + Login Verification
+[32mINFO    [0m CheckStatus:checkstatus.py:45 test_validLogin ### TEST SUCCESSFUL<br/></div></td></tr></tbody></table></body></html>
